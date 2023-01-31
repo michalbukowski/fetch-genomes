@@ -7,11 +7,9 @@ from time import sleep
 import pandas as pd
 
 
-log_file = None
 assembly_summary = 'ftp://ftp.ncbi.nlm.nih.gov/genomes/genbank/assembly_summary_genbank.txt'
 summary_cols = 'assembly_accession taxid assembly_level asm_name ftp_path'.split()
 summary_copy = 'assembly_summary_copy.tsv'
-processed_accessions = 'processed_accessions.txt'
 assembly_formats = {
     'fna'  : 'genomic.fna.gz',
     'gbff' : 'genomic.gbff.gz',
@@ -45,16 +43,6 @@ def parse_args():
         metavar='file_path', help='Path where to save assembly summary for ' +
             f'chosen taxids in TSV fromat, default: {summary_copy}')
 
-    parser.add_argument('-p', '--processed-accessions', type=str, default=processed_accessions,
-        metavar='file_path', help='Path where to save assembly accession ' +
-            'numbers for successfully fetched genomes, ' +
-           f'default: {processed_accessions}')
-
-    parser.add_argument('-s', '--skip-accessions', type=str, default=None,
-        metavar='file_path', help='Path to a custom local file with white-space' +
-            'separated assembly accessions numbers for genomes to be skipped, ' +
-            'default: do not skip any genome')
-
     parser.add_argument('-t', '--taxids', type=int, nargs='*', default=None,
         metavar='taxid', help='IDs of taxonomical branches to retrive genomic ' +
                               'sequences for, default: all existing(!)')
@@ -80,21 +68,16 @@ def parse_args():
              'translations of CDS in protein fasta format (prot), ' +
              'default: only fna')
 
-    parser.add_argument('-m', '--log-messages', type=str, default=None,
-        metavar='file_path', help='Path to the log file, default: stdout')
-
     parser.add_argument('-n', '--non-interactive', action='store_true',
         help='Do not ask questions and overwrite existing data ' +
              '(be absolutely sure what you do)')
+    
+    parser.add_argument('-s', '--summary-only', action='store_true',
+        help='For given taxids or all, only download summary')
 
     args = parser.parse_args()
 
     return args
-
-
-def log(msg):
-    log_file.write(msg + '\n')
-    log_file.flush()
 
 
 def interrogate(msg):
@@ -108,25 +91,6 @@ def interrogate(msg):
 
 
 def setup_env(args):
-
-    global log_file
-
-    print_fn = log if args.non_interactive else log
-
-    if args.log_messages is not None:
-        if os.path.exists(args.log_messages):
-            if os.path.isfile(args.log_messages):
-                ans = True if args.non_interactive else \
-                      interrogate(f'Log file "{args.log_messages}" exists. ' +
-                          'Do you want to overwrite?')
-                if not ans:
-                    return False
-            else:
-                print_fn(f'[ERROR] Log file path "{args.log_messages}" points to an existing directory')
-                return False
-        log_file = open(args.log_messages, 'w', buffering=1)
-    else:
-        log_file = sys.stdout
 
     if args.assembly_summary is None and args.taxids is None:
         ans = True if args.non_interactive else \
@@ -153,25 +117,12 @@ def setup_env(args):
                 'points to an existing directory')
             return False
 
-    if os.path.exists(args.processed_accessions):
-        if os.path.isfile(args.processed_accessions):
-            ans = True if args.non_interactive else \
-                  interrogate('File with processed assembly accession numbers ' +
-                      f'"{args.processed_accessions}" exists. ' +
-                       'Do you want to overwrite?')
-            if not ans:
-                return False
-        else:
-            print_fn('[ERROR] Path to the file with processed assembly ' +
-                f'accession numbers "{args.processed_accessions}" ' +
-                 'points to an existing directory')
-            return False
-
-    if os.path.exists(args.output_dir):
+    if not args.summary_only and os.path.exists(args.output_dir):
         if os.path.isdir(args.output_dir):
             ans = True if args.non_interactive else \
                   interrogate(f'Output directory "{args.output_dir}" exists. ' +
-                      'The content might be overwritten. Do you want to continue?')
+                      'Genomes will be saved alongside existing data. ' +
+                      'Do you want to continue?')
             if not ans:
                 return False
         else:
@@ -188,7 +139,7 @@ def fetch_taxids(taxids):
     if taxids is None:
         return [], '[INFO] No taxid provided, assembly summary will not be filtered'
 
-    all_taxids = []
+    all_taxids = taxids.copy()
 
     for taxid in taxids:
 
@@ -210,7 +161,7 @@ def fetch_taxids(taxids):
             if 'esearchresult' not in res_json or 'idlist' not in res_json['esearchresult']:
                 return None, f'[ERROR] Unexpected result format returned by NCBI efetch for taxid {taxid}'
 
-            res_chunk = res_json['esearchresult']['idlist']
+            res_chunk = [ int(taxid) for taxid in res_json['esearchresult']['idlist'] ]
 
             taxid_chunk.extend(res_chunk)
             retstart += esearch_retmax
@@ -226,9 +177,7 @@ def fetch_taxids(taxids):
 
 
 def fetch_summary(summary_path):
-
     if summary_path is None:
-
         try:
             res = urllib.request.urlopen(assembly_summary, timeout=60)
             summary_df = pd.read_csv(res, skiprows=1, index_col=None, sep='\t')
@@ -239,7 +188,6 @@ def fetch_summary(summary_path):
         return summary_df, '[INFO] Fetched assembly summary of {} rows and {} columns'.format(*summary_df.shape)
 
     else:
-
         try:
             summary_df = pd.read_csv(summary_path, index_col=None, sep='\t')
         except:
@@ -249,34 +197,6 @@ def fetch_summary(summary_path):
             return None, '[ERROR] Assembly summary does not contain required columns: ' + ', '.join(summary_cols)
 
         return summary_df, '[INFO] Loaded assembly summary of {} rows and {} columns'.format(*summary_df.shape)
-
-
-def load_accessions(accessions_path):
-
-    if accessions_path is None:
-        return [], '[INFO] No file is provided with assembly accession numbers to be skipped'
-
-    try:
-        with open(accessions_path) as f:
-            accessions = f.read().rstrip().split()
-    except:
-        return None, f'[ERROR] Assembly accession numbers cannot be loaded from "{accessions_path}"'
-    return accessions, f'[INFO] Loaded {len(accessions)} assembly accession numbers'
-
-
-def skip_accessions(summary_df, accessions):
-
-    if len(accessions) == 0:
-        return summary_df, f'[INFO] No accession number to be skipped is provided, all {summary_df.shape[0]} assemblies will be processed'
-
-    summary_df = summary_df[ ~summary_df['assembly_accession'].isin(accessions) ]
-
-    if summary_df.shape[0] > 0:
-        msg = f'[INFO] There is {summary_df.shape[0]} assemblies after exclusion of provided accession numbers'
-    else:
-        msg = '[WARNING] No assemblies left in the summary when provided accession numbers were excluded'
-
-    return summary_df, msg
 
 
 def filter_taxids(summary_df, taxids):
@@ -321,16 +241,11 @@ def save_summary(summary_df, fpath):
     return True, f'[INFO] Filtered summary successfully saved to "{fpath}"'
 
 
-def fetch_genomes(summary_df, formats, processed_accessions, output_dir):
-
-    try:
-        accf = open(processed_accessions, 'w')
-    except:
-        return '[ERROR] Cannot open file with processed accession numbers ' + \
-              f'for writing: "{processed_accessions}"'
+def fetch_genomes(summary_df, formats, output_dir):
 
     not_found = 0
     fetched   = 0
+    existing  = 0
 
     summary_df.reset_index(drop=True, inplace=True)
 
@@ -340,6 +255,22 @@ def fetch_genomes(summary_df, formats, processed_accessions, output_dir):
     
         if ftp_path.startswith('https://'):
             ftp_path = 'ftp://' + ftp_path[8:]
+        
+        pos = ftp_path.rfind('/')
+        asm_full_name = ftp_path[pos+1:]
+        
+        done = [False] * len(formats)
+        for i, fmt in enumerate(formats):
+            suffix  = assembly_formats[fmt]
+            fnamein = f'{asm_full_name}_{suffix}'
+            fpathout = f'{output_dir}/{fnamein}'
+            if os.path.exists(fpathout):
+                if os.path.isfile(fpathout):
+                    done[i] = True
+        if all(done):
+            existing += len(formats)
+            yield f'[INFO] Skipping {assembly_accession}, already fetched'
+            continue
 
         yield f'\n[INFO] Fetching files for assembly {assembly_accession} ' + \
               f'({index+1}/{summary_df.shape[0]})...'
@@ -370,9 +301,6 @@ def fetch_genomes(summary_df, formats, processed_accessions, output_dir):
 
         yield f'[INFO] MD5 checksums for {assembly_accession} successfully fetched'
 
-        pos = ftp_path.rfind('/')
-        asm_full_name = ftp_path[pos+1:]
-
         old_fetched = fetched
 
         for fmt in formats:
@@ -387,9 +315,7 @@ def fetch_genomes(summary_df, formats, processed_accessions, output_dir):
                 not_found += 1
                 continue
 
-            pos      = suffix[:suffix.rfind('.')].rfind('.')
-            ext      = suffix[pos+1:]
-            fpathout = f'{output_dir}/{assembly_accession}.{ext}'
+            fpathout = f'{output_dir}/{fnamein}'
 
             if not fnamein in md5sums:
                 yield f'[ERROR] Cannot find MD5 checksum for {assembly_accession} assembly file: "{fpathin}"'
@@ -398,30 +324,13 @@ def fetch_genomes(summary_df, formats, processed_accessions, output_dir):
 
             if os.path.exists(fpathout):
                 if os.path.isfile(fpathout):
-                    with open(fpathout, 'rb') as f:
-                        content = f.read()
-                    md5sum = hashlib.md5(content).hexdigest()
-                    if md5sum == md5sums[fnamein]:
-                        yield f'[INFO] Correct MD5 checksum ({md5sum}) for the existing {assembly_accession} assembly file: "{fpathout}"'
-                        yield f'[INFO] Keeping the existing {assembly_accession} assembly file: "{fpathout}"'
-                        fetched += 1
-                        continue
-                    else:
-                        yield f'[WARNING] Incorrect MD5 checksum ({md5sum}) ' + \
-                              f'for the existing {assembly_accession} assembly file ({md5sums[fnamein]}): "{fpathout}"'
-                        try:
-                            os.remove(fpathout)
-                        except:
-                            yield f'[ERROR] Cannot remove {assembly_accession} assembly file: "{fpathout}"'
-                            yield f'[WARNING] {assembly_accession} assembly file "{fpathout}" is corrupted, please remove it and run the script again!'
-                            yield f'[WARNING] Skipping {assembly_accession} assembly file: "{fpathin}"'
-                            continue
-                        else:
-                            yield f'[WARNING] The existing {assembly_accession} assembly file "{fpathout}" has been removed and will be fetched again'
+                    yield f'[INFO] The output path "{fpathout}" exists and is a file, considered done'
+                    yield f'[INFO] Skipping {assembly_accession} assembly file: "{fpathin}"'
+                    existing += 1
                 else:
                     yield f'[ERROR] The output path "{fpathout}" exists and is not a file'
                     yield f'[WARNING] Skipping {assembly_accession} assembly file: "{fpathin}"'
-                    continue
+                continue
 
             try:
                 res = urllib.request.urlopen(fpathin, timeout=60)
@@ -443,24 +352,27 @@ def fetch_genomes(summary_df, formats, processed_accessions, output_dir):
                 yield f'[WARNING] Skipping {assembly_accession} assembly file: "{fpathin}"'
                 continue
 
+            tmpfpathout = f'{output_dir}/.{fnamein}'
             try:
-                with open(fpathout, 'wb') as f:
+                with open(tmpfpathout, 'wb') as f:
                     f.write(content)
             except:
                 yield f'[ERROR] Cannot save to "{fpathout}" the {assembly_accession} assembly file: "{fpathin}"'
                 yield f'[WARNING] Skipping {assembly_accession} assembly file: "{fpathin}"'
+                continue
+                
+            try:
+                os.rename(tmpfpathout, fpathout)
+            except:
+                yield f'[ERROR] Cannot save to "{fpathout}" the {assembly_accession} assembly file: "{fpathin}"'
+                yield f'[WARNING] Skipping {assembly_accession} assembly file: "{fpathin}"'
+                os.remove(tmpfpathout)
             else:
                 yield f'[INFO] {assembly_accession} assembly file "{fpathin}" successfully saved to "{fpathout}"'
                 fetched += 1
 
-        if fetched - old_fetched == len(formats):
-            accf.write(f'{assembly_accession}\n')
-            accf.flush()
-
-    accf.close()
-
     total = summary_df.shape[0] * len(formats)
-    left  = total-not_found-fetched
+    left  = total-existing-not_found-fetched
     yield f'\n[INFO] Fetched {fetched} files out of {total} inferred (not found on site: {not_found})'
     if left > 0:
         yield f'\n[WARNING] {left} files are still to be fetched'
@@ -468,54 +380,49 @@ def fetch_genomes(summary_df, formats, processed_accessions, output_dir):
         yield '[INFO] All files have been successfully fetched'
     yield '[INFO] Fetching genomes has been completed'
 
-def run():
-
+def main():
     args = parse_args()
-
+    
     res = setup_env(args)
     if not res:
         sys.exit('[INFO] Exiting...')
-
-    taxids, msg = fetch_taxids(args.taxids)
-    log(msg)
-    if taxids is None:
-        sys.exit(1)
-
+    
+    extra_msg = ' from NCBI (it may take a while...)' \
+                if args.assembly_summary is None else ''
+    print(f'[INFO] Fetching assembly summary{extra_msg}', flush=True)
     summary_df, msg = fetch_summary(args.assembly_summary)
-    log(msg)
+    print(msg, flush=True)
     if summary_df is None:
         sys.exit(1)
-
-    accessions, msg = load_accessions(args.skip_accessions)
-    log(msg)
+    
+    print('[INFO] Fetching taxids...', flush=True)
+    taxids, msg = fetch_taxids(args.taxids)
+    print(msg, flush=True)
     if taxids is None:
         sys.exit(1)
-
-    summary_df, msg = skip_accessions(summary_df, accessions)
-    log(msg)
-    if summary_df is None:
-        sys.exit(1)
-
+    
     summary_df, msg = filter_taxids(summary_df, taxids)
-    log(msg)
+    print(msg, flush=True)
     if summary_df is None:
         sys.exit(1)
-
+    
     summary_df, msg = filter_levels(summary_df, args.assembly_levels)
-    log(msg)
+    print(msg, flush=True)
     if summary_df is None:
         sys.exit(1)
-
+    
     status, msg = save_summary(summary_df, args.summary_copy)
-    log(msg)
+    print(msg, flush=True)
     if status is None:
         sys.exit(1)
-
-    for msg in fetch_genomes(
-        summary_df, args.formats, args.processed_accessions, args.output_dir
-    ):
-        log(msg)
+    elif args.summary_only:
+        print('[INFO] Only assembly summary requested, exiting...', flush=True)
+        sys.exit(0)
+    
+    for msg in fetch_genomes(summary_df, args.formats, args.output_dir):
+        print(msg, flush=True)
 
 
 if __name__ == '__main__':
-    run()
+    main()
+
