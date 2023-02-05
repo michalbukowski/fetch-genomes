@@ -217,7 +217,7 @@ def fetch_genomes(summary_df, formats, output_dir):
     
     summary_df.reset_index(drop=True, inplace=True)
     
-    for index, (assembly_accession, ftp_path) in summary_df[
+    for index, (asm_acc, ftp_path) in summary_df[
         'assembly_accession ftp_path'.split()
     ].iterrows():
     
@@ -231,16 +231,16 @@ def fetch_genomes(summary_df, formats, output_dir):
         for i, fmt in enumerate(formats):
             suffix  = assembly_formats[fmt]
             fnamein = f'{asm_full_name}_{suffix}'
-            fpathout = f'{output_dir}/{fnamein}'
+            fpathout = f'{output_dir}/{asm_acc}_{suffix}'
             if os.path.exists(fpathout):
                 if os.path.isfile(fpathout):
                     done[i] = True
         if all(done):
             existing += len(formats)
-            yield f'[INFO] Skipping {assembly_accession}, already fetched'
+            yield f'[INFO] Skipping {asm_acc}, already fetched'
             continue
             
-        yield f'\n[INFO] Fetching files for assembly {assembly_accession} ' + \
+        yield f'\n[INFO] Fetching files for assembly {asm_acc} ' + \
             f'({index+1}/{summary_df.shape[0]})...'
             
         try:
@@ -251,7 +251,7 @@ def fetch_genomes(summary_df, formats, output_dir):
             raise e
         except:
             yield f'[ERROR] Cannot fetch file list from "{ftp_path}"'
-            yield f'[WARNING] Skipping assembly {assembly_accession}...'
+            yield f'[WARNING] Skipping assembly {asm_acc}...'
             continue
             
         yield f'[INFO] There is {len(flist)} files at "{ftp_path}"'
@@ -265,13 +265,13 @@ def fetch_genomes(summary_df, formats, output_dir):
             raise e
         except:
             yield f'[ERROR] Info on MD5 checksums cannot be fetched from "{full_path}"'
-            yield f'[WARNING] Skipping assembly {assembly_accession}...'
+            yield f'[WARNING] Skipping assembly {asm_acc}...'
             continue
             
         md5sums = [ line.split() for line in md5sums ]
         md5sums = { line[1].lstrip('./') : line[0] for line in md5sums }
         
-        yield f'[INFO] MD5 checksums for {assembly_accession} successfully fetched'
+        yield f'[INFO] MD5 checksums for {asm_acc} successfully fetched'
         
         old_fetched = fetched
         
@@ -282,46 +282,46 @@ def fetch_genomes(summary_df, formats, output_dir):
             fpathin = f'{ftp_path}/{fnamein}'
             
             if not fnamein in flist:
-                yield f'[ERROR] No such file for {assembly_accession} assembly: "{fpathin}"'
-                yield f'[WARNING] Skipping {assembly_accession} assembly file: "{fpathin}"'
+                yield f'[ERROR] No such file for {asm_acc} assembly: "{fpathin}"'
+                yield f'[WARNING] Skipping {asm_acc} assembly file: "{fpathin}"'
                 not_found += 1
                 continue
             
-            fpathout = f'{output_dir}/{fnamein}'
-            
-            if not fnamein in md5sums:
-                yield f'[ERROR] Cannot find MD5 checksum for {assembly_accession} assembly file: "{fpathin}"'
-                yield f'[WARNING] Skipping {assembly_accession} assembly file: "{fpathin}"'
-                continue
+            fpathout = f'{output_dir}/{asm_acc}_{suffix}'
                 
             if os.path.exists(fpathout):
                 if os.path.isfile(fpathout):
                     yield f'[INFO] The output path "{fpathout}" exists and is a file, considered done'
-                    yield f'[INFO] Skipping {assembly_accession} assembly file: "{fpathin}"'
+                    yield f'[INFO] Skipping {asm_acc} assembly file: "{fpathin}"'
                     existing += 1
                 else:
                     yield f'[ERROR] The output path "{fpathout}" exists and is not a file'
-                    yield f'[WARNING] Skipping {assembly_accession} assembly file: "{fpathin}"'
+                    yield f'[WARNING] Skipping {asm_acc} assembly file: "{fpathin}"'
+                continue
+            
+            if not fnamein in md5sums:
+                yield f'[ERROR] Cannot find MD5 checksum for {asm_acc} assembly file: "{fpathin}"'
+                yield f'[WARNING] Skipping {asm_acc} assembly file: "{fpathin}"'
                 continue
                 
             try:
                 res = urllib.request.urlopen(fpathin, timeout=60)
                 content = res.read()
             except:
-                yield f'[ERROR] {assembly_accession} assembly file cannot be fetched from: "{fpathin}"'
-                yield f'[WARNING] Skipping {assembly_accession} assembly file: "{fpathin}"'
+                yield f'[ERROR] {asm_acc} assembly file cannot be fetched from: "{fpathin}"'
+                yield f'[WARNING] Skipping {asm_acc} assembly file: "{fpathin}"'
                 continue
                 
-            yield f'[INFO] {assembly_accession} assembly file "{fpathin}" successfully fetched'
+            yield f'[INFO] {asm_acc} assembly file "{fpathin}" successfully fetched'
             
             md5sum = hashlib.md5(content).hexdigest()
             
             if md5sum == md5sums[fnamein]:
-                yield f'[INFO] Correct MD5 checksum ({md5sum}) for {assembly_accession} assembly file: "{fpathin}"'
+                yield f'[INFO] Correct MD5 checksum ({md5sum}) for {asm_acc} assembly file: "{fpathin}"'
             else:
                 yield f'[ERROR] Incorrect MD5 checksum ({md5sum}) ' + \
-                      f'for {assembly_accession} assembly file ({md5sums[fnamein]}): "{fpathin}"'
-                yield f'[WARNING] Skipping {assembly_accession} assembly file: "{fpathin}"'
+                      f'for {asm_acc} assembly file ({md5sums[fnamein]}): "{fpathin}"'
+                yield f'[WARNING] Skipping {asm_acc} assembly file: "{fpathin}"'
                 continue
                 
             tmpfpathout = f'{output_dir}/.{fnamein}'
@@ -329,18 +329,18 @@ def fetch_genomes(summary_df, formats, output_dir):
                 with open(tmpfpathout, 'wb') as f:
                     f.write(content)
             except:
-                yield f'[ERROR] Cannot save to "{fpathout}" the {assembly_accession} assembly file: "{fpathin}"'
-                yield f'[WARNING] Skipping {assembly_accession} assembly file: "{fpathin}"'
+                yield f'[ERROR] Cannot save to "{fpathout}" the {asm_acc} assembly file: "{fpathin}"'
+                yield f'[WARNING] Skipping {asm_acc} assembly file: "{fpathin}"'
                 continue
                 
             try:
                 os.rename(tmpfpathout, fpathout)
             except:
-                yield f'[ERROR] Cannot save to "{fpathout}" the {assembly_accession} assembly file: "{fpathin}"'
-                yield f'[WARNING] Skipping {assembly_accession} assembly file: "{fpathin}"'
+                yield f'[ERROR] Cannot save to "{fpathout}" the {asm_acc} assembly file: "{fpathin}"'
+                yield f'[WARNING] Skipping {asm_acc} assembly file: "{fpathin}"'
                 os.remove(tmpfpathout)
             else:
-                yield f'[INFO] {assembly_accession} assembly file "{fpathin}" successfully saved to "{fpathout}"'
+                yield f'[INFO] {asm_acc} assembly file "{fpathin}" successfully saved to "{fpathout}"'
                 fetched += 1
     
     total = summary_df.shape[0] * len(formats)
