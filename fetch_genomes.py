@@ -324,7 +324,7 @@ def fetch_genomes(summary_df, formats, output_dir):
                 yield f'[WARNING] Skipping {asm_acc} assembly file: "{fpathin}"'
                 continue
                 
-            tmpfpathout = f'{output_dir}/.{fnamein}'
+            tmpfpathout = f'{output_dir}/.{asm_acc}_{suffix}'
             try:
                 with open(tmpfpathout, 'wb') as f:
                     f.write(content)
