@@ -345,7 +345,8 @@ def fetch_genomes(summary_df, formats, output_dir):
     
     total = summary_df.shape[0] * len(formats)
     left  = total-existing-not_found-fetched
-    yield f'\n[INFO] Fetched {fetched} files out of {total} inferred (not found on site: {not_found})'
+    yield f'\n[INFO] Fetched {fetched} files out of {total} inferred ' + \
+          f'(already existing: {existing}, not found on site: {not_found})'
     if left > 0:
         yield f'\n[WARNING] {left} files are still to be fetched'
     else:
