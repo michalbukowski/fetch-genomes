@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 import os, sys, argparse
 import requests, urllib
 import hashlib
@@ -116,7 +115,8 @@ def setup_env(args):
                 'points to an existing file')
             return False
             
-    os.makedirs(args.output_dir, exist_ok=True)
+    if not args.summary_only:
+        os.makedirs(args.output_dir, exist_ok=True)
     return True
 
 def fetch_taxids(taxids):
@@ -162,7 +162,6 @@ def fetch_summary(summary_path):
             return None, f'[ERROR] Assembly summary cannot be fetched from "{assembly_summary}"'
         else:
             return summary_df, '[INFO] Fetched assembly summary of {} rows and {} columns'.format(*summary_df.shape)
-        
     else:
         try:
             summary_df = pd.read_csv(summary_path, index_col=None, sep='\t')
@@ -216,14 +215,11 @@ def fetch_genomes(summary_df, formats, output_dir):
     existing  = 0
     
     summary_df.reset_index(drop=True, inplace=True)
-    
     for index, (asm_acc, ftp_path) in summary_df[
         'assembly_accession ftp_path'.split()
     ].iterrows():
-    
         if ftp_path.startswith('https://'):
             ftp_path = 'ftp://' + ftp_path[8:]
-            
         pos = ftp_path.rfind('/')
         asm_full_name = ftp_path[pos+1:]
         
@@ -239,7 +235,6 @@ def fetch_genomes(summary_df, formats, output_dir):
             existing += len(formats)
             yield f'[INFO] Skipping {asm_acc}, already fetched'
             continue
-            
         yield f'\n[INFO] Fetching files for assembly {asm_acc} ' + \
             f'({index+1}/{summary_df.shape[0]})...'
             
@@ -253,11 +248,9 @@ def fetch_genomes(summary_df, formats, output_dir):
             yield f'[ERROR] Cannot fetch file list from "{ftp_path}"'
             yield f'[WARNING] Skipping assembly {asm_acc}...'
             continue
-            
         yield f'[INFO] There is {len(flist)} files at "{ftp_path}"'
         
         full_path = f'{ftp_path}/{md5sums_fname}'
-        
         try:
             res = urllib.request.urlopen(full_path, timeout=60)
             md5sums = res.read().decode().rstrip().split('\n')
@@ -267,16 +260,12 @@ def fetch_genomes(summary_df, formats, output_dir):
             yield f'[ERROR] Info on MD5 checksums cannot be fetched from "{full_path}"'
             yield f'[WARNING] Skipping assembly {asm_acc}...'
             continue
-            
         md5sums = [ line.split() for line in md5sums ]
         md5sums = { line[1].lstrip('./') : line[0] for line in md5sums }
-        
         yield f'[INFO] MD5 checksums for {asm_acc} successfully fetched'
         
         old_fetched = fetched
-        
         for fmt in formats:
-            
             suffix  = assembly_formats[fmt]
             fnamein = f'{asm_full_name}_{suffix}'
             fpathin = f'{ftp_path}/{fnamein}'
@@ -288,7 +277,6 @@ def fetch_genomes(summary_df, formats, output_dir):
                 continue
             
             fpathout = f'{output_dir}/{asm_acc}_{suffix}'
-                
             if os.path.exists(fpathout):
                 if os.path.isfile(fpathout):
                     yield f'[INFO] The output path "{fpathout}" exists and is a file, considered done'
@@ -311,11 +299,9 @@ def fetch_genomes(summary_df, formats, output_dir):
                 yield f'[ERROR] {asm_acc} assembly file cannot be fetched from: "{fpathin}"'
                 yield f'[WARNING] Skipping {asm_acc} assembly file: "{fpathin}"'
                 continue
-                
             yield f'[INFO] {asm_acc} assembly file "{fpathin}" successfully fetched'
             
             md5sum = hashlib.md5(content).hexdigest()
-            
             if md5sum == md5sums[fnamein]:
                 yield f'[INFO] Correct MD5 checksum ({md5sum}) for {asm_acc} assembly file: "{fpathin}"'
             else:
