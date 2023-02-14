@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
+# Created by Michal Bukowski (michal.bukowski@tuta.io) under GPL-3.0 license
+
+# USAGE, example (for more see ./fetch_genomes.py -h):
+# download genomes for taxid 1279 (Staphylococcus) and 1350 (Enterococcus) and
+# all subtaxa to a default directory (genomes) in the current location:
+# ./fetch_genomes.py -t 1279 1350
+# resume previous downolading based on saved filtered assembly summary:
+# ./fetch_genomes.py -a assembly_summary_copy.tsv
+# retrive filtered assembly summary only:
+# ./fetch_genomes.py -t 1279 1350 -s
+# you may find desirable taxids here: https://www.ncbi.nlm.nih.gov/taxonomy
+
 import os, sys, argparse
 import requests, urllib
 import hashlib
 from time import sleep
 import pandas as pd
-
-# USAGE, example (for more see ./fetch_genomes.py -h):
-# download genomes for taxid 1279 (Staphylococcus) and 1350 (Enterococcus) and
-# all subtaxa to a default directory (genomes) in the current location:
-# ./fetch_genomes -t 1279 1350
-# resume previous downolading based on saved filtered assembly summary:
-# ./fetch_genomes -a assembly_summary_copy.tsv
-# retrive filtered assembly summary only:
-# ./fetch_genomes -t 1279 1350 -s
-# you may find desirable taxids here: https://www.ncbi.nlm.nih.gov/taxonomy
 
 # path to a TSV file on NCBI server that contains info on genomic assemblies
 assembly_summary = 'ftp://ftp.ncbi.nlm.nih.gov/genomes/genbank/assembly_summary_genbank.txt'
@@ -63,7 +65,7 @@ def parse_args():
     parser.add_argument(
         '-c', '--summary-copy', type=str, default=summary_copy, metavar='file_path',
         help='A path to a TSV file where to save the filtered assembly ' +
-            f'summary for chosen taxids in TSV fromat, default: {summary_copy}'
+            f'summary for chosen taxids in TSV format, default: {summary_copy}'
     )
     parser.add_argument(
         '-t', '--taxids', type=int, nargs='*', default=None, metavar='taxid',
