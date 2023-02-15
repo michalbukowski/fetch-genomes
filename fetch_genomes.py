@@ -52,8 +52,30 @@ esearch_path = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?' + \
                'db=taxonomy&term=txid{taxid}[orgn]&retmode=json&'            + \
                'retmax={retmax}&retstart={retstart}'
 
-# parse optional arguments, see argument description
 def parse_args():
+    '''Parse arguments:
+       -a, ‑‑assembly‑summary -- a path to a custom local file in TSV format that
+           contains information on assemblies that are to be downloaded,
+           default: assembly summary will be fetched from NCBI GenBank FTP site
+       -c, ‑‑summary-copy -- a path to a TSV file where to save the filtered
+           assembly summary for chosen taxids in TSV format,
+           default: _assembly_summary_copy.tsv_
+       -t, ‑‑taxids -- space-separated IDs of taxa to retrive genomic sequences for,
+           default: all existing(!)
+       -l, ‑‑assembly-levels -- space-separated assembly levels that will be taken
+           into consideration: chromosome (chr), scaffold (scff), complete (cmpl),
+           contig (ctg), default: all levels
+       -o, ‑‑output-dir -- a path to the directory for downloaded genomes,
+           dafault: _genomes_
+       -f, ‑‑formats -- formats of data to be downloaded: genomic sequences in
+           nucleotide fasta format (fna), genomic sequences in GenBank format (gbff),
+           annotation table (gff), RNA sequences in nucleotide fasta format (rna),
+           coding sequences (CDS) in nucleotide fasta format (cds), translations
+           of CDS in protein fasta format (prot), default: fna
+       -n, ‑‑non-interactive -- do not ask questions and overwrite existing data
+           (be absolutely sure what you do)
+       -s, ‑‑summary-only -- for given taxids or all, only download assembly summary
+    '''
     parser = argparse.ArgumentParser()
     
     parser.add_argument(
@@ -108,9 +130,11 @@ def parse_args():
     args = parser.parse_args()
     return args
 
-# in interactive mode, show a yes/no question (msg) and retrive an answer, not
-# used when non-interatvie mode (-n, --non-interactive) is on
 def interrogate(msg):
+    '''In interactive mode, shows a yes/no question (msg) and retrive an answer,
+       not used when non-interatvie mode (-n, --non-interactive) is on. Arguments:
+       msg -- a message/question to be communicated
+    '''
     ans = ''
     while ans != 'yes' and ans != 'no':
         ans = input(msg + ' (yes/no)\n')
@@ -119,9 +143,12 @@ def interrogate(msg):
     else:
         return False
 
-# show information on planned actions and ask for confirmation, unless non-interatvie
-# mode (-n, --non-interactive) is on
 def setup_env(args):
+    '''Shows information on planned actions and ask for confirmation, unless
+       non-interatvie mode (-n, --non-interactive) is on. Arguments:
+       args -- the object returned by parse_args function containg values
+               of command line arguments
+    '''
     # no taxid or pre-filtered assembly summary is provided, ask whether to
     # download all genomes from NCBI GenBank
     if args.assembly_summary is None and args.taxids is None:
@@ -184,11 +211,16 @@ def setup_env(args):
         os.makedirs(args.output_dir, exist_ok=True)
     return True
 
-# fetch IDs for all subtaxa for provided taxids from NCBI Taxonomy in chunks
-# of esearch_retmax (hardcoded for maximum size of 100000) by sending
-# HTTPS requests with GET method and obtaining responses in JSON format,
-# sleeps 0.5 sec after each request to avoid being blocked by NCBI server
+
 def fetch_taxids(taxids):
+    '''Fetches IDs for all subtaxa for provided taxids from NCBI Taxonomy in chunks
+       of esearch_retmax (hardcoded for maximum size of 100000) by sending
+       HTTPS requests with GET method and obtaining responses in JSON format,
+       sleeps 0.5 sec after each request to avoid being blocked by NCBI server.
+       Arguments:
+       taxids -- a list of taxids of interest, may be empty if all taxids ought
+                 to be taken into account
+    '''
     if taxids is None:
         return [], '[INFO] No taxid provided, assembly summary will not be filtered'
     
@@ -221,9 +253,14 @@ def fetch_taxids(taxids):
         
     return all_taxids, f'[INFO] Fetched total number of {len(all_taxids)} taxids'
 
-# fetch summary form NCBI GenBank FTP server if a path to an exisiting one is not given,
-# return None and an error message when any problem arises
 def fetch_summary(summary_path):
+    '''Fetches assembly summary form NCBI GenBank FTP server if a path to an
+       exisiting one is not given, returns None and an error message when
+       any problem arises. Arguments:
+       summary_path -- a path to a custom local file in TSV format that
+                       contains information on assemblies that are to be downloaded,
+                       if None, the summary will be fetch from NCBI server
+    '''
     if summary_path is None:
         try:
             res = urllib.request.urlopen(assembly_summary, timeout=60)
@@ -244,9 +281,12 @@ def fetch_summary(summary_path):
         else:
             return summary_df, '[INFO] Loaded assembly summary of {} rows and {} columns'.format(*summary_df.shape)
 
-# having a complete list of requensted taxids and taxids for all subtaxa, select
-# desirable rows from the assembly summary DataFrame
 def filter_taxids(summary_df, taxids):
+    '''Having a complete list of requensted taxids and taxids for all subtaxa,
+       selects desirable rows from the assembly summary DataFrame. Arguments:
+       summary_df -- a Pandas DataFrame with the assembly summary
+       taxids -- a list of taxids of interest
+    '''
     if len(taxids) == 0:
         return summary_df, f'[INFO] No taxid provided, all {summary_df.shape[0]} assemblies will be processed'
         
@@ -259,9 +299,13 @@ def filter_taxids(summary_df, taxids):
         
     return summary_df, msg
 
-# having assembly levels indicated, select desirable rows from
-# the assembly summary DataFrame
+
 def filter_levels(summary_df, levels):
+    '''Having assembly levels indicated, selects desirable rows from the assembly
+       summary DataFrame. Arguments:
+       summary_df -- a Pandas DataFrame with the assembly summary
+       levels -- a list of assembly levels of interest
+    '''
     if levels is None:
         return summary_df, f'[INFO] No assembly levels provided, all {summary_df.shape[0]} assemblies will be processed'
     else:
@@ -276,8 +320,11 @@ def filter_levels(summary_df, levels):
         
     return summary_df, msg
 
-# save the filtered assembly summary
 def save_summary(summary_df, fpath):
+    '''Saves the filtered assembly summary. Arguments:
+       summary_df -- a Pandas DataFrame with the final assembly summary
+       fpath -- a path where the summary ought to be saved as a TSV file
+    '''
     try:
         summary_df.to_csv(fpath, index=False, sep='\t')
     except:
@@ -285,9 +332,13 @@ def save_summary(summary_df, fpath):
     else:
         return True, f'[INFO] Filtered summary successfully saved to "{fpath}"'
 
-# having filtered assembly summary, fetch included genomes by sending FTP
-# requests via urllib
 def fetch_genomes(summary_df, formats, output_dir):
+    '''Having filtered assembly summary, fetches finally selected genomes by sending
+       FTP requests via urllib. Arguments:
+       summary_df -- a Pandas DataFrame with the final assembly summary
+       formats -- formats of data to be retrieved
+       output_dir -- a directory for the data to be saved to
+    '''
     not_found = 0
     fetched   = 0
     existing  = 0
@@ -448,10 +499,11 @@ def fetch_genomes(summary_df, formats, output_dir):
         yield '[INFO] All files have been successfully fetched'
     yield '[INFO] Fetching genomes has been completed'
 
-# the entry poin function that executes all stages one by one, receive messages
-# from stage-executing functions and prints them,
-# if a critical error araises, exits
 def main():
+    '''The entry poin function that executes all stages one by one, receive messages
+       from stage-executing functions and prints them, if a critical error araises,
+       shows a message and exits.
+    '''
     # parce command line arguments
     args = parse_args()
     
