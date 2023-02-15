@@ -32,7 +32,7 @@ You can run it without any command line options or provide one or more `taxid` v
 | `‑c`,&nbsp;`‑‑summary-copy` | A path to a TSV file where to save the filtered assembly summary for chosen taxids in TSV format, default: _assembly_summary_copy.tsv_|
 | `‑t`,&nbsp;`‑‑taxids` | Space-separated IDs of taxa to retrive genomic sequences for, default: all existing(!) |
 | `‑l`,&nbsp;`‑‑assembly-levels` | Space-separated assembly levels that will be taken into consideration: chromosome (`chr`), scaffold (`scff`), complete (`cmpl`), contig (`ctg`), default: all levels |
-| `‑o`,&nbsp;`‑‑output-dir` | Path to the directory for downloaded genomes, dafault: _genomes_ |
+| `‑o`,&nbsp;`‑‑output-dir` | A path to the directory for downloaded genomes, dafault: _genomes_ |
 | `‑f`,&nbsp;`‑‑formats` | Formats of data to be downloaded: genomic sequences in nucleotide fasta format (`fna`), genomic sequences in GenBank format (`gbff`), annotation table (`gff`), RNA sequences in nucleotide fasta format (`rna`), coding sequences (`CDS`) in nucleotide fasta format (`cds`), translations of CDS in protein fasta format (`prot`), default: fna |
 | `‑n`,&nbsp;`‑‑non-interactive` | Do not ask questions and overwrite existing data (be absolutely sure what you do) |
 | `‑s`,&nbsp;`‑‑summary-only` | For given taxids or all, only download assembly summary |
