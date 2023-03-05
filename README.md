@@ -1,4 +1,4 @@
-# fetch-genomes
+## fetch-genomes
 
 ### Requirements
 The script should work in all Python 3 environents with Pandas library installed. Below I provide versions for which I tested the script:
