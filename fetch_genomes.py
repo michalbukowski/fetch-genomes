@@ -265,7 +265,8 @@ def fetch_summary(summary_path):
         try:
             res = urllib.request.urlopen(assembly_summary, timeout=60)
             summary_df = pd.read_csv(res, skiprows=1, index_col=None, sep='\t')
-            summary_df.rename(columns={'# assembly_accession' : 'assembly_accession'}, inplace=True)
+            asm_col_name = summary_df.columns[0]
+            summary_df.rename(columns={asm_col_name : asm_col_name.lstrip('# ')}, inplace=True)
         except:
             return None, f'[ERROR] Assembly summary cannot be fetched from "{assembly_summary}"'
         else:
