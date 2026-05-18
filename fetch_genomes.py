@@ -351,6 +351,7 @@ def fetch_genomes(summary_df, formats, output_dir):
     for index, (asm_acc, ftp_path) in summary_df[
         'assembly_accession ftp_path'.split()
     ].iterrows():
+        ftp_path = ftp_path.rstrip('/')
         if ftp_path.startswith('https://'):
             ftp_path = 'ftp://' + ftp_path[8:]
         pos = ftp_path.rfind('/')
